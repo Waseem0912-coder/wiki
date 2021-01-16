@@ -1,116 +1,89 @@
 
-from django.shortcuts  import render
+from django.shortcuts  import render, redirect, reverse
 from django.http import HttpResponse, HttpResponseRedirect
 from django import forms
-import random
+from random import choice
 from markdown2 import Markdown
 from . import util
 
 
 class SearchForm(forms.Form):
-    query = forms.CharField(label="Search Encyclopedia",required=False)
+    query = forms.CharField(label="Search Encyclopedia", widget=forms.TextInput(attrs={'class' : 'form-control col-md-8 col-lg-8'}))
 
+class CreateForm(forms.Form):
+    title = forms.CharField(label="Type in the title of the entry", widget=forms.TextInput(attrs={'class' : 'form-control col-md-4 col-lg-4'}))
+    content = forms.CharField(label="Type in content of your entry", widget=forms.Textarea(attrs={'class': 'form-control'}))
+
+class Edit(forms.Form):
+    textarea = forms.CharField(widget=forms.Textarea(), label='')
 
 def index(request):
-    form=SearchForm(request.POST)
     return render(request, "encyclopedia/index.html", {
-        "entries": util.list_entries(), "form":form
-    })
+        "entries": util.list_entries()     })
+
 def page_view(request, title):
-    form = SearchForm()
     entry = util.get_entry(title)
     if entry==None:
         return render(request, "encyclopedia/error.html", {
-            "content":"No entry with such title, please try the search bar",
-            "form":form
+            "content":"No entry with such title, please try the search bar"
         })
     else:
         html_content = Markdown().convert(entry)
         #encyclopedia
         return render(request, "encyclopedia/page_view.html", {
-            "content":html_content, "title":title,"form":form
-        })
+            "content":html_content, "title":title })
+
 
 def search(request):
-    if (request.method =="POST"):
-        form = SearchForm(request.POST)
+    search = request.GET.get('q')
+    found = []
+    for find in util.list_entries():
+        if search.lower() == find.lower():
+            return HttpResponseRedirect(reverse("encyclopedia:page_view", kwargs={"title": find}
+))
+
+        if search.lower() in find.lower():
+            found.append(find)
+    return render(request, "encyclopedia/search.html", {
+        "entries": found
+    })
+
+def create(request):
+    if request.method =="POST":
+       create =  CreateForm(request.POST)
+       if create.is_valid():
+            title =  create.cleaned_data["title"]
+            content = create.cleaned_data["content"]
+            if(util.get_entry(title) is None):
+                util.save_entry(title, content)
+                return HttpResponseRedirect(reverse("encyclopedia:page_view", kwargs={"title": title}
+                ))
+            if(util.get_entry(title)) is not None:
+                return HttpResponseRedirect(reverse("encyclopedia:page_view", kwargs={"title": title}))
+    else:
+        return  render(request, "encyclopedia/create.html", {
+            "creation":CreateForm()
+        } )
+
+
+def edit(request, title):
+    if request.method == 'GET':
+        page = util.get_entry(title)
+
+        context = {
+            'edit': Edit(initial={'textarea': page}),
+            'title': title
+        }
+
+        return render(request, "encyclopedia/edit.html", context)
+    else:
+        form = Edit(request.POST)
         if form.is_valid():
-            query = form.cleaned_data["query"]
-            string = query.lower()
-            entries = util.list_entries()
-            list1 = list()
-            exists = False
-            if len(string)==0:
-                return render(request, "encyclopedia/error.html", {
-                "content":"Your search was empty please try again",
-                "form":form
-                })
-
-            for  entry in entries:
-                ent = entry.lower()
-                if string==ent:
-                    exists = True
-                elif query in entry:
-                    list1.append(entry)
-            if(len(list1)==0):
-                return render(request, "encyclopedia/error.html", {
-                "content":"No entry with such title, please try the searching again",
-                "form":form
-                })
-            if(exists==True):
-                result = util.get_entry(query)
-                page = Markdown().convert(result)
-                return render(request, "encyclopedia/page_view.html", {
-                "content":page, "title":result,"form":form
-                })
-
-            else:
-                return render(request, "encyclopedia/index.html", {
-                    "entries": list1, "form":form
-                })
+            textarea = form.cleaned_data["textarea"]
+            util.save_entry(title,textarea)
+            return HttpResponseRedirect(reverse("encyclopedia:page_view", kwargs={"title": title}))
 
 
+def random_page(request):
+      return page_view(request,choice( util.list_entries()))
 
-
-
-
-'''
-def search(request):
-    if (request.method =="POST"):
-        form = SearchForm(request.POST)
-        if form.is_valid():
-            query = form.cleaned_data["query"]
-            string = query.lower()
-            entries = util.list_entries()
-            list1 = list()
-            exists = False
-            if len(string)==0:
-                return render(request, "encyclopedia/error.html", {
-                "content":"Your search was empty please try again",
-                "form":form
-                })
-
-            for  entry in entries:
-                if string==entry:
-                    exists = True
-                elif query in entry:
-                    list1.append(entry)
-            if(len(list1)==0):
-                return render(request, "encyclopedia/error.html", {
-                "content":"No entry with such title, please try the searching again",
-                "form":form
-                })
-            elif(exists==True):
-                query = util.get_entry(query)
-                page = Markdown().convert(query)
-                return render(request, "encyclopedia/page_view.html", {
-                "content":page, "title":query,"form":form
-                })
-
-            else:
-                return render(request, "encyclopedia/index.html", {
-                    "entries": list1, "form":form
-                })
-
-
-'''
